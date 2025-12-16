@@ -48,5 +48,5 @@ class UserTenantValidationPolicy(
         return ""
 
     def __group_roles_from_idp_per_tenant(self, user_context: UserContext):
-        roles_per_tenant = {"global": ["super_admin"]}
+        roles_per_tenant = {"global": ["superAdmin"]}
         return roles_per_tenant
