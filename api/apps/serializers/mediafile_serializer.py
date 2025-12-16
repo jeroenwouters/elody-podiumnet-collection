@@ -1,6 +1,5 @@
 from copy import deepcopy
-from apps.vliz.resources.base_resource import VlizBaseResource
-from apps.vliz.serializers.vliz_serializer import VlizSerializer
+from apps.podiumnet.resources.base_resource import PodiumnetBaseResource
 from urllib.parse import quote
 from flask import request
 
@@ -19,14 +18,14 @@ DOCUMENT_METADATA_KEYS = {
 }
 
 
-class MediafileSerializer(VlizSerializer):
+class MediafileSerializer():
     def __init__(self):
-        self.base_resource = VlizBaseResource()
+        self.base_resource = PodiumnetBaseResource()
 
-    def from_vliz_to_elody(self, document: dict, **_):
+    def from_podiumnet_to_elody(self, document: dict, **_):
         if document.get("schema", {}).get("type") == "elody":
             return document
-        serialized_document = super().from_vliz_to_elody(document)
+        serialized_document = super().from_podiumnet_to_elody(document)
 
         for key, value in document.get("metadata", {}).items():
             serialized_document.update({key: value})
@@ -49,7 +48,7 @@ class MediafileSerializer(VlizSerializer):
             [serialized_document]
         )[0]
 
-    def from_vliz_to_texturilist(self, document, filename_key="filename", **_):
+    def from_podiumnet_to_texturilist(self, document, filename_key="filename", **_):
         # storage_api_url = self.base_resource.storage_api_url.removesuffix("/")
         # original_filename = document.get("metadata", {}).get("original_filename")
         # ticket_id = self.base_resource._create_ticket(original_filename)
@@ -80,8 +79,8 @@ class MediafileSerializer(VlizSerializer):
         ticket_id = self.base_resource._create_ticket(original_filename)
         return f"{storage_api_url}/upload-with-ticket/{quote(original_filename)}?id={document['id']}&ticket_id={ticket_id}"  # noqa
 
-    def from_elody_to_vliz(self, document, **_):
-        serialized_document = super().from_elody_to_vliz(document)
+    def from_elody_to_podiumnet(self, document, **_):
+        serialized_document = super().from_elody_to_podiumnet(document)
 
         if filename := document.get("filename"):
             serialized_document["properties"].update({"filename": {"value": filename}})
@@ -96,10 +95,10 @@ class MediafileSerializer(VlizSerializer):
 
         return serialized_document
 
-    def _parse_dataframe_to_vliz(
+    def _parse_dataframe_to_podiumnet(
         self, columns, row, document_type="", property_value_map={}
     ):
-        document = super()._parse_dataframe_to_vliz(
+        document = super()._parse_dataframe_to_podiumnet(
             columns, row, document_type, property_value_map
         )
 
