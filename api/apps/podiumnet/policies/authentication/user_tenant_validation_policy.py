@@ -32,7 +32,7 @@ class UserTenantValidationPolicy(
         )
 
     def promote_role(self, user_context: UserContext):
-        return None
+        return "superAdmin"
 
     def build_user_context_for_anonymous_user(self, request, user_context):
         return super().build_user_context_for_anonymous_user(request, user_context)

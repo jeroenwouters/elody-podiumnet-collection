@@ -1,4 +1,6 @@
-from apps.podiumnet.object_configurations.entity_configuration import EntityConfiguration
+from apps.podiumnet.object_configurations.entity_configuration import (
+    EntityConfiguration,
+)
 from apps.podiumnet.object_configurations.user_configuration import UserConfiguration
 from apps.podiumnet.object_configurations.tenant_configuration import TenantConfiguration
 from apps.podiumnet.object_configurations.mediafile_configuration import MediafileConfiguration
@@ -34,4 +36,7 @@ STORAGE_MAPPER = {
 
 COLLECTION_MAPPER = {"tickets": "abstracts"}
 
-FEATURES = {}
+FEATURES = {
+    "bulk_operations": {"import": {}, "edit": {}, "export": {}},
+    "specs": {"elody": {"mediafiles": {}}},
+}

@@ -3,9 +3,12 @@ import re
 from urllib.parse import unquote
 from uuid import uuid4
 
-from apps.podiumnet.object_configurations.entity_configuration import EntityConfiguration
+from apps.podiumnet.object_configurations.entity_configuration import (
+    EntityConfiguration,
+)
+
 # from apps.podiumnet.serializers.mediafile_serializer import MediafileSerializer
-from apps.podiumnet.validation.util import get_schema
+# from apps.podiumnet.validation.util import get_schema
 from configuration import (  # pyright: ignore[reportMissingImports]
     get_object_configuration_mapper,
 )
@@ -13,6 +16,7 @@ from elody.util import send_cloudevent
 from flask import g
 from rabbit import get_rabbit  # pyright: ignore
 from storage.storagemanager import StorageManager
+from elody.schemas import entity_schema
 
 
 class MediafileConfiguration(EntityConfiguration):
@@ -47,7 +51,7 @@ class MediafileConfiguration(EntityConfiguration):
 #         return getattr(MediafileSerializer(), f"from_{from_format}_to_{to_format}")
 
     def validation(self):
-        return "schema", get_schema("mediafile")
+        return "schema", entity_schema
 
     def _pre_crud_hook(self, *, crud, document={}, **kwargs):
         if document:
