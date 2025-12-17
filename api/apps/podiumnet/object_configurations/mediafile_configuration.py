@@ -79,14 +79,16 @@ class MediafileConfiguration(EntityConfiguration):
                     post_body["filename"],
                     *post_body.pop("identifiers", []),
                 ],
-                "metadata" :[
-                    {"key": "access", "value": "closed"},
-                    {"key": "quality_access", "value": "low"},
-                ]
-                if post_body.get("technical_origin", "original") == "original"
-                else []
-                **self._get_audit_override(post_body),
-            }
+                "metadata": (
+                    [
+                        {"key": "access", "value": "closed"},
+                        {"key": "quality_access", "value": "low"},
+                    ]
+                    if post_body.get("technical_origin", "original") == "original"
+                    else []
+                ),
+                # **self._get_audit_override(post_body),
+            },
         )
 
         return [mediafile]
