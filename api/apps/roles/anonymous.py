@@ -1,10 +1,32 @@
 ANONYMOUS = {
     "anonymous": {
-        "create": {},
-        "read": {
-            "savedSearch": {}
+        "create": {
+            "tenant": {},
+            "user": {},
+            "mediafile": {},
+            "savedSearch": {},
+            "asset": {}
         },
-        "update": {},
-        "delete": {},
+        "read": {
+            "tenant": {},
+            "user": {},
+            "mediafile": {},
+            "savedSearch": {},
+            "asset": {}
+        },
+        "update": {
+            "tenant": {},
+            "user": {},
+            "mediafile": {},
+            "savedSearch": {},
+            "asset": {}
+        },
+        "delete": {
+            "tenant": {},
+            "user": {},
+            "mediafile": {},
+            "savedSearch": {},
+            "asset": {}
+        },
     },
 }

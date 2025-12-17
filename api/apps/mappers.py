@@ -2,6 +2,7 @@ from apps.podiumnet.object_configurations.entity_configuration import EntityConf
 from apps.podiumnet.object_configurations.user_configuration import UserConfiguration
 from apps.podiumnet.object_configurations.tenant_configuration import TenantConfiguration
 from apps.podiumnet.object_configurations.mediafile_configuration import MediafileConfiguration
+from apps.podiumnet.object_configurations.asset_configuration import AssetConfiguration
 from storage.arangostore import ArangoStorageManager
 from storage.memorystore import MemoryStorageManager
 from storage.mongostore import MongoStorageManager
@@ -14,6 +15,7 @@ OBJECT_CONFIGURATION_MAPPER = {
     "mediafile": MediafileConfiguration,
     "tenant": TenantConfiguration,
     "user": UserConfiguration,
+    "asset": AssetConfiguration,
 }
 
 ROUTE_MAPPER = {

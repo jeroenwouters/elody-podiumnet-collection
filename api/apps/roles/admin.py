@@ -4,25 +4,29 @@ ADMIN = {
             "tenant": {},
             "user": {},
             "mediafile": {},
-            "savedSearch": {}
+            "savedSearch": {},
+            "asset": {}
         },
         "read": {
             "tenant": {},
             "user": {},
             "mediafile": {},
-            "savedSearch": {}
+            "savedSearch": {},
+            "asset": {}
         },
         "update": {
             "tenant": {},
             "user": {},
             "mediafile": {},
-            "savedSearch": {}
+            "savedSearch": {},
+            "asset": {}
         },
         "delete": {
             "tenant": {},
             "user": {},
             "mediafile": {},
-            "savedSearch": {}
+            "savedSearch": {},
+            "asset": {}
         },
     },
 }
