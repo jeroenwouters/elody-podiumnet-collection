@@ -2,7 +2,7 @@ from elody.object_configurations.elody_configuration import (
     ElodyConfiguration,
 )
 
-class PipelineConfiguration(ElodyConfiguration):
+class AssetConfiguration(ElodyConfiguration):
     SCHEMA_TYPE = "elody"
     SCHEMA_VERSION = 1
 
