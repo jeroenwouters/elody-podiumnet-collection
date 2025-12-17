@@ -10,7 +10,9 @@ from storage.arangostore import ArangoStorageManager
 from storage.memorystore import MemoryStorageManager
 from storage.mongostore import MongoStorageManager
 from storage.httpstore import HttpStorageManager
-
+from elody.object_configurations.saved_search_configuration import (
+    SavedSearchConfiguration,
+)
 
 OBJECT_CONFIGURATION_MAPPER = {
     "entities": EntityConfiguration,
@@ -19,6 +21,7 @@ OBJECT_CONFIGURATION_MAPPER = {
     "tenant": TenantConfiguration,
     "user": UserConfiguration,
     "asset": AssetConfiguration,
+    "saved_search": SavedSearchConfiguration,
     "production": ProductionConfiguration,
 }
 
@@ -27,6 +30,8 @@ ROUTE_MAPPER = {
     "FilterEntitiesV2": "/entities/filter",
     "FilterGenericObjectsV2": "/<string:collection>/filter",
     "FilterGenericObjects": "/<string:collection>/filter_deprecated",
+    "FilterMediafiles": "/mediafiles/filter_deprecated",
+    "FilterMediafilesV2": "/mediafiles/filter",
 }
 
 STORAGE_MAPPER = {

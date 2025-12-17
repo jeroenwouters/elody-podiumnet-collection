@@ -1,259 +1,223 @@
-from copy import deepcopy
-import re
-from urllib.parse import unquote
-from uuid import uuid4
-
+from app_context import g, request  # pyright: ignore
 from apps.podiumnet.object_configurations.entity_configuration import (
     EntityConfiguration,
 )
-
-# from apps.podiumnet.serializers.mediafile_serializer import MediafileSerializer
-# from apps.podiumnet.validation.util import get_schema
-from configuration import (  # pyright: ignore[reportMissingImports]
-    get_object_configuration_mapper,
-)
-from elody.util import send_cloudevent
-from flask import g
+from apps.podiumnet.serializers.mediafile_serializer import MediafileSerializer
+from configuration import get_object_configuration_mapper  # pyright: ignore
+from copy import deepcopy
+from elody.util import flatten_dict, send_cloudevent
 from rabbit import get_rabbit  # pyright: ignore
+from resources.base_filter_resource import BaseFilterResource  # pyright: ignore
 from storage.storagemanager import StorageManager
-from elody.schemas import entity_schema
+from uuid import uuid4
 
 
 class MediafileConfiguration(EntityConfiguration):
-    SCHEMA_TYPE = "elody"
+    SCHEMA_TYPE = "dams"
     SCHEMA_VERSION = 1
 
     def crud(self):
-        crud = {
-            "collection": "mediafiles",
-            # TODO: This should probably just be called in the pre_crud_hook of the mediafiles
-            "fix_linked_entities": lambda id, **kwargs: self.__fix_related_entities(
-                id, **kwargs
-            ),
-        }
+        crud = {"collection": "mediafiles", "collection_history": "mediafiles_history"}
         return {**super().crud(), **crud}
 
     def document_info(self):
-        # TODO: Add indexes
-
-        info = {
+        document_info = {
+            "indexes": {
+                "mediafiles": [
+                    ("id", "_id", True),
+                    ("identifiers", "identifiers", True),
+                    ("original_filename", "original_filename", True),
+                    (
+                        "type-technical_origin",
+                        [("type", 1), ("technical_origin", 1)],
+                        False,
+                    ),
+                ]
+            },
             "tenant_id_resolver": lambda document: self.__tenant_id_resolver(document),
         }
-        return {**super().document_info(), **info}
+        return {**super().document_info(), **document_info}
 
     def logging(self, flat_document, **kwargs):
-        return super().logging(flat_document=flat_document, **kwargs)
+        return super().logging(flat_document, **kwargs)
 
     def migration(self):
         return super().migration()
 
-#     def serialization(self, from_format, to_format):
-#         return getattr(MediafileSerializer(), f"from_{from_format}_to_{to_format}")
+    def serialization(self, from_format, to_format):
+        return getattr(MediafileSerializer(), f"from_{from_format}_to_{to_format}")
 
     def validation(self):
-        return "schema", entity_schema
+        return super().validation()
 
-    def _pre_crud_hook(self, *, crud, document={}, **kwargs):
-        if document:
-            if not document.get("type"):
-                document["type"] = "mediafile"
-            self.__correct_document_metadata(crud, document)
-            # FIXME: There is an issue with a patch supplying too much data somewhere
-            # which includes urls that then clog up a request somewhere
-            # I already spent too long on trying to figure out exactly what causes this
-            # It's either something in the storage_api, or happens when a job update is called
-            # I assume it's the job update, since that will use the basic routing key which
-            # isn't caught by the podiumnet specific queue
-            document = self.remove_injected_urls(document)
-            return super()._pre_crud_hook(crud=crud, document=document, **kwargs)
-        elif property := kwargs.get("property"):
-            kwargs.pop("property")
-            return super()._pre_crud_hook(crud=crud, property=property, **kwargs)
+    def _creation_preparer(self, post_body, **_):
+        if post_body.get("technical_origin", "original") == "original" and (
+            id := (request.view_args or {}).get("id")
+        ):
+            for relation in post_body.get("relations", []):
+                if relation["key"] == id and relation["type"] == "isMediafileFor":
+                    break
+            else:
+                post_body["relations"] = post_body.get("relations", []) + [
+                    {"key": id, "type": "isMediafileFor"}
+                ]
+        try:
+            return self._creator(deepcopy(post_body))[-1]
+        except Exception as exception:
+            if request.args.get("soft"):
+                return post_body
+            raise exception
 
     def _creator(self, post_body, **_):
-        _id: str = post_body.get("_id", "")
-        if not _id.startswith("MED"):
-            _id = f"MED-{str(uuid4())}"
-
-        return super()._creator(
+        post_body = self.__mutate_post_body(post_body)
+        mediafile = super()._creator(
             post_body,
             document_defaults={
-                "_id": _id,
-                "id": _id,
-                "identifiers": [_id],
-            },
+                "_id": post_body["_id"],
+                "identifiers": [
+                    post_body["_id"],
+                    post_body["filename"],
+                    *post_body.pop("identifiers", []),
+                ],
+                "metadata" :[
+                    {"key": "access", "value": "closed"},
+                    {"key": "quality_access", "value": "low"},
+                ]
+                if post_body.get("technical_origin", "original") == "original"
+                else []
+                **self._get_audit_override(post_body),
+            }
         )
 
-    def _post_crud_hook(self, *, crud, document, **kwargs):
+        return [mediafile]
+
+    def _post_crud_hook(self, *, crud, document, storage, **kwargs):
         self.__generate_upload_link(crud, document)
-        super()._post_crud_hook(document=document, **kwargs)
+        self.__delete_derivatives(crud, document, storage)
+        super()._post_crud_hook(crud=crud, document=document, storage=storage, **kwargs)
         self.__delete_file_from_storage(crud, document)
 
-    def __delete_file_from_storage(self, crud, document):
-        if crud == "delete":
-            serialize = self.serialization("podiumnet", "elody")
-            send_cloudevent(
-                get_rabbit(),
-                "podiumnet",
-                "podiumnet.mediafile_deleted",
-                {"mediafile": serialize(document), "linked_entities": []},
-            )
-
-    def __generate_upload_link(self, crud, document):
-        if crud == "create":
-            text_uri_list = g.get("text_uri_list", "")
-            uri = self.serialization("podiumnet", "texturilist")(document)
-            g.text_uri_list = text_uri_list + "\n" + uri if text_uri_list else uri
+    def _pre_crud_hook(self, *, crud, document={}, **kwargs):
+        document = self.__correct_document_metadata(crud, document)
+        document = self.__duplicate_is_mediafile_for_relations_to_ref_assets(document)
+        return super()._pre_crud_hook(crud=crud, document=document, **kwargs)
 
     def __correct_document_metadata(self, crud, document):
         if document:
             if crud == "create":
-                document["metadata"].update(
-                    {"original_filename": document["metadata"]["filename"]}
-                )
-            if document["properties"].get("filename"):
-                del document["properties"]["filename"]
-            if md5sum := document["metadata"].get("md5sum"):
+                document.update({"original_filename": document["filename"]})
+            if md5sum := document.get("md5sum"):
                 document["identifiers"].append(md5sum)
-
-    def __fix_related_entities(self, id, **kwargs):
-
-        storage = StorageManager().get_db_engine()  # pyright: ignore[reportCallIssue]
-
-        links = ["primary_mediafile_id", "primary_thumbnail_id"]
-        query = {"$or": [{link: id} for link in links]}
-
-        entities = storage.db[self.crud()["collection"]].find_one(query)
-        if entities:
-            for entity in entities:
-                new_entity = deepcopy(entity)
-                for link in links:
-                    if entity.get(link) == id:
-                        new_entity.pop(link)
-                storage.put_item_to_collection_v2("mediafiles", entity, new_entity)
-
-    # FIXME:
-    def remove_injected_urls(self, document, **_):
-        document_metadata = document.get("metadata")
-        if original_file_location := document_metadata.get("original_file_location"):
-            document_metadata["original_file_location"] = unquote(
-                re.sub(
-                    r"\?ticket_id=.*$",
-                    "",
-                    re.sub(
-                        r"^htt.*/download-with-ticket/",
-                        "/download/",
-                        original_file_location,
-                    ),
-                )
-            )
-
-        if transcode_file_location := document_metadata.get("transcode_file_location"):
-            document_metadata["transcode_file_location"] = unquote(
-                re.sub(
-                    r"\?ticket_id=.*$",
-                    "",
-                    re.sub(
-                        r"^htt.*/download-with-ticket/",
-                        "/download/",
-                        transcode_file_location,
-                    ),
-                )
-            )
-
-        if root_transcode_file_location := document.get("transcode_file_location"):
-            document["transcode_file_location"] = unquote(
-                re.sub(
-                    r"\?ticket_id=.*$",
-                    "",
-                    re.sub(
-                        r"^htt.*/download-with-ticket/",
-                        "/download/",
-                        root_transcode_file_location,
-                    ),
-                )
-            )
-
-        if thumbnail_file_location := document_metadata.get("thumbnail_file_location"):
-
-            document_metadata["thumbnail_file_location"] = unquote(
-                re.sub(r"^.*/iiif/", "/iiif/", thumbnail_file_location)
-            )
-
         return document
 
-    def _document_content_patcher(
-        self, *, document, content, crud, timestamp, overwrite=False, **kwargs
-    ):
-        document_metadata = None
-        for key, value in content.items():
-            if isinstance(value, dict) and key == "metadata":
-                document[key] = self._document_content_patcher(
-                    document=document.get(key, {}),
-                    content=value,
-                    crud=crud,
-                    timestamp=timestamp,
-                    **kwargs,
+    def __delete_derivatives(self, crud, document, storage):
+        if crud == "delete":
+            derivatives = (
+                BaseFilterResource()
+                ._execute_advanced_search_with_query_v2(
+                    self.get_derivatives_query(document["_id"]),
+                    self.crud()["collection"],
+                    limit=999999,
                 )
-                document_metadata = document.pop("metadata")
+                .get("results", [])
+            )
+            for derivative in derivatives:
+                derivative = storage.get_item_from_collection_by_id(
+                    self.crud()["collection"], derivative["_id"]
+                )
+                storage.delete_item(derivative)
 
-        result = super()._document_content_patcher(
-            document=document,
-            content=content,
-            crud=crud,
-            timestamp=timestamp,
-            overwrite=overwrite,
-            kwargs=kwargs,
-        )
-        # NOTE: Together with the pop("metadata") this is a workaround for an
-        # overzealous patcher upstream
-        if document_metadata:
-            result["metadata"] = document_metadata
-        return result
+    def __delete_file_from_storage(self, crud, document):
+        if crud == "delete":
+            serialize = self.serialization(self.SCHEMA_TYPE, "elody")
+            send_cloudevent(
+                get_rabbit(),
+                "dams",
+                "dams.mediafile_deleted",
+                {"mediafile": serialize(document), "linked_entities": []},
+            )
 
-    def _sorting(self, key_order_map, **_):
-        addFields, sort = {}, {}
-        for key, order in key_order_map.items():
-            if key not in ["date_created", "date_updated", "last_editor"]:
-                addFields.update({key: f"$metadata.{key}"})
-            sort.update({key: order})
-        mediafile = []
-        if addFields:
-            mediafile.append({"$addFields": addFields})
+    def __duplicate_is_mediafile_for_relations_to_ref_assets(self, document):
+        if document.get("technical_origin") != "original":
+            return document
 
-        mediafile.append({"$sort": sort})
-        return mediafile
+        document["ref_assets"] = [
+            relation["key"]
+            for relation in document.get("relations", [])
+            if relation["type"] == "isMediafileFor"
+        ]
+        return document
+
+    def __generate_upload_link(self, crud, document):
+        if crud == "create":
+            text_uri_list = g.get("text_uri_list", "")
+            uri = self.serialization(self.SCHEMA_TYPE, "texturilist")(document)
+            g.text_uri_list = text_uri_list + "\n" + uri if text_uri_list else uri
+
+    def __mutate_post_body(self, post_body):
+        flat_post_body = flatten_dict(self.document_info()["object_lists"], post_body)
+        post_body["_id"] = post_body.get("_id", str(uuid4()))
+
+        relations = []
+        for relation in post_body["relations"]:
+            if relation["type"] != "hasOrigin":
+                relations.append(relation)
+            elif relation["key"].lower().strip() != "file":
+                relations.append(
+                    {
+                        "key": flat_post_body.get("metadata.file_identifier.value"),
+                        "type": relation["type"],
+                        "label": relation["key"],
+                    }
+                )
+        post_body["relations"] = relations
+
+        return post_body
 
     def __tenant_id_resolver(self, document):
-        parent_ids = document.get("proprties", {}).get("belongs_to", {}).get("value")
-        if not isinstance(parent_ids, list):
-            parent_ids = [parent_ids]
+        flat_document = flatten_dict(self.document_info()["object_lists"], document)
+        asset_ids = flat_document.get("relations.isMediafileFor.key")
+        if not isinstance(asset_ids, list):
+            asset_ids = [asset_ids]
 
-        context_ids = []
+        institution_ids = []
         storage_manager = StorageManager()  # pyright: ignore
-        config = get_object_configuration_mapper().get("media")
-        for media_id in parent_ids:
-            media = (
+        config = get_object_configuration_mapper().get("asset")
+        for asset_id in asset_ids:
+            asset = (
                 storage_manager.get_db_engine().get_item_from_collection_by_id(
-                    config.crud()["collection"], media_id
+                    config.crud()["collection"], asset_id
                 )
                 or {}
             )
             resolve_tenant_id = config.document_info()["tenant_id_resolver"]
-            context_ids.extend(resolve_tenant_id(media).split(","))
+            institution_ids.extend(resolve_tenant_id(asset).split(","))
 
-        return ",".join(context_ids)
-
-        # return "podiumnet_context"
+        return ",".join(institution_ids)
 
     @classmethod
     def get_derivatives_query(cls, id):
         return [
             {"type": "type", "value": "mediafile"},
             {
-                "type": "selection",
-                "key": ["podiumnet:1|properties.belongs_to_parent.value"],
+                "type": "text",
+                "key": ["dams:1|relations.isMediafileFor.key"],
                 "value": id,
                 "match_exact": True,
+                "operator": "or",
+            },
+            {
+                "type": "text",
+                "key": ["dams:1|relations.isTranscodeFor.key"],
+                "value": id,
+                "match_exact": True,
+                "operator": "or",
+            },
+            {
+                "type": "text",
+                "key": ["dams:1|relations.isOcrFor.key"],
+                "value": id,
+                "match_exact": True,
+                "operator": "or",
             },
         ]
