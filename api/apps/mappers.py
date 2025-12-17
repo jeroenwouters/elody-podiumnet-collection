@@ -13,6 +13,7 @@ from storage.httpstore import HttpStorageManager
 from elody.object_configurations.saved_search_configuration import (
     SavedSearchConfiguration,
 )
+from elody.object_configurations.job_configuration import JobConfiguration
 
 OBJECT_CONFIGURATION_MAPPER = {
     "entities": EntityConfiguration,
@@ -23,6 +24,7 @@ OBJECT_CONFIGURATION_MAPPER = {
     "asset": AssetConfiguration,
     "saved_search": SavedSearchConfiguration,
     "production": ProductionConfiguration,
+    "job": JobConfiguration,
 }
 
 ROUTE_MAPPER = {
