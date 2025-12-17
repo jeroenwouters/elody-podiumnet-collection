@@ -36,6 +36,13 @@ class PodiumnetEntityDetail(PodiumnetBaseResource, EntityDetail):
     def delete(self, id):
         return super().delete(id)
 
+class PodiumnetMediafileCopyright(PodiumnetBaseResource):
+    @apply_policies(RequestContext(request))
+    def get(self, id):
+        if request.args.get("soft", 0, int):
+            return "good", 200
+        return True, 200
 
 api.add_resource(PodiumnetEntity, "/entities")
 api.add_resource(PodiumnetEntityDetail, "/entities/<string:id>")
+api.add_resource(PodiumnetMediafileCopyright, "/mediafiles/<string:id>/copyright")
