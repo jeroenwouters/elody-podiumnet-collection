@@ -6,6 +6,8 @@ from apps.podiumnet.object_configurations.tenant_configuration import TenantConf
 from apps.podiumnet.object_configurations.mediafile_configuration import MediafileConfiguration
 from apps.podiumnet.object_configurations.asset_configuration import AssetConfiguration
 from apps.podiumnet.object_configurations.production_configuration import ProductionConfiguration
+from apps.podiumnet.object_configurations.notification_configuration import NotificationConfiguration
+from apps.podiumnet.object_configurations.podiumhuis_configuration import PodiumhuisConfiguration
 from storage.arangostore import ArangoStorageManager
 from storage.memorystore import MemoryStorageManager
 from storage.mongostore import MongoStorageManager
@@ -24,6 +26,8 @@ OBJECT_CONFIGURATION_MAPPER = {
     "asset": AssetConfiguration,
     "saved_search": SavedSearchConfiguration,
     "production": ProductionConfiguration,
+    "notification": NotificationConfiguration,
+    "podiumhuis": PodiumhuisConfiguration,
     "job": JobConfiguration,
 }
 
